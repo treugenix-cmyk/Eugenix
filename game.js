@@ -1,9 +1,9 @@
 'use strict';
 const CHARACTERS = Object.freeze({
-  busya: { name: 'Буся', symbol: '🐈', beats: 'kanik' },
-  kanik: { name: 'Каник', symbol: '🐺', beats: 'tanyunya' },
-  tanyunya: { name: 'Танюня', symbol: '🦊', beats: 'voya-boya' },
-  'voya-boya': { name: 'Воя-Боя', symbol: '🐻', beats: 'busya' }
+  busya: { name: 'Буся', portrait: './busya.jpg', beats: 'kanik' },
+  kanik: { name: 'Каник', portrait: './kanik.jpg', beats: 'tanyunya' },
+  tanyunya: { name: 'Танюня', portrait: './tanyunya.jpg', beats: 'voya-boya' },
+  'voya-boya': { name: 'Воя-Боя', portrait: './voya-boya.jpg', beats: 'busya' }
 });
 // 1 — победа игрока, -1 — победа компьютера, 0 — ничья.
 function compareCards(player, computer) {
@@ -24,7 +24,14 @@ function makeCard(card, interactive = false) {
   node.className = `card ${card.character}`;
   node.setAttribute('aria-label', `${character.name}, сила ${card.power}`);
   if (interactive) node.type = 'button';
-  for (const [className, value] of [['power',card.power],['symbol',character.symbol],['name',character.name]]) {
+  const portrait = document.createElement('img');
+  portrait.className = 'portrait';
+  // Относительный путь сохраняет префикс проекта на GitHub Pages.
+  portrait.src = character.portrait;
+  portrait.alt = '';
+  portrait.draggable = false;
+  node.append(portrait);
+  for (const [className, value] of [['power',card.power],['name',character.name]]) {
     const part = document.createElement('span');
     part.className = className;
     part.textContent = value;
