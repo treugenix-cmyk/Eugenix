@@ -804,8 +804,11 @@ select {
 
 /* За широким столом два соперника сидят сверху, остальные — по бокам. */
 @media (min-width: 1100px) {
-  .opponents { position: relative; }
-  .opponent:nth-child(3), .opponent:nth-child(4) {
+  .opponents {
+    position: relative;
+  }
+  .opponent:nth-child(3),
+  .opponent:nth-child(4) {
     position: absolute;
     top: 170px;
     min-width: 0;
@@ -814,6 +817,93 @@ select {
     text-align: center;
     padding: 14px 8px;
   }
-  .opponent:nth-child(3) { left: 0; }
-  .opponent:nth-child(4) { right: 0; }
+  .opponent:nth-child(3) {
+    left: 0;
+  }
+  .opponent:nth-child(4) {
+    right: 0;
+  }
+}
+
+/* Используем утверждённые полные карточки без обрезки заголовков и лиц. */
+.playing-card.full-art-card {
+  padding: 0;
+  background: var(--card-color);
+}
+.playing-card .approved-card-image {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  object-fit: contain;
+  min-height: 0;
+  display: block;
+  border-radius: 10px;
+}
+.card-tile {
+  flex: 0 0 132px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.card-tile .playing-card {
+  width: 100%;
+  flex-basis: auto;
+}
+.zoom-button {
+  min-height: 34px;
+  font-size: 10px;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: #fff9ec;
+}
+.playing-card.selected {
+  outline: 3px solid #e58150;
+  outline-offset: 2px;
+}
+.selection-badge {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #365e48;
+  border-radius: 50%;
+}
+.combo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.combo-controls button,
+.combo-controls span {
+  font-size: 12px;
+}
+.zoomed-card {
+  display: block;
+  max-width: 100%;
+  max-height: 60svh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto 16px;
+}
+.rules-card-image {
+  display: block;
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin: 12px auto;
+}
+.reaction-state {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f2e5cb;
+  color: #354c3d !important;
 }

@@ -10,6 +10,7 @@ const mime = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".svg": "image/svg+xml",
+  ".png": "image/png",
 };
 const server = createServer(async (request, response) => {
   try {
@@ -63,41 +64,44 @@ try {
       );
     assert.match(await page.title(), /Семейный переполох/);
     const count = await page.evaluate(async () => {
-      const types = [
-        "danger",
-        "defuse",
-        "skip",
-        "reverse",
-        "attack",
-        "peek",
-        "shuffle",
-        "request",
-        "top",
-        "bottom",
+      const files = [
+        "01_papa_s_remnem.png",
+        "02_mama_s_salatom.png",
+        "03_tanya_s_gradusnikom.png",
+        "04_zoya_vygonyaet.png",
+        "05_masha_arkasha_podralis.png",
+        "06_zoya_binokl.png",
+        "07_arkasha_lego.png",
+        "08_masha_uroki.png",
+        "09_zoya_dengi.png",
+        "10_tanya_kopilka.png",
+        "11_zoya_uchit_kitayskiy.png",
+        "12_tanya_tantsuet.png",
+        "13_masha_risuet.png",
       ];
-      for (const type of types) {
+      for (const file of files) {
         const image = new Image();
-        image.src = `./cards/${type}.svg`;
+        image.src = `./cards/family/${file}`;
         await image.decode();
-        if (image.naturalWidth === 0) throw new Error(type);
+        if (!image.naturalWidth) throw new Error(file);
       }
-      return types.length;
+      return files.length;
     });
-    assert.equal(count, 10);
+    assert.equal(count, 13);
     await page.getByRole("button", { name: "Играть", exact: false }).click();
     await page
       .getByRole("button", { name: "Взять карту и завершить ход" })
       .waitFor();
-    assert.equal(await page.locator(".hand .playing-card").count(), 5);
+    assert.equal(await page.locator(".hand .playing-card").count(), 8);
     await page.reload();
     await page.getByRole("button", { name: "Продолжить партию" }).click();
-    assert.equal(await page.locator(".hand .playing-card").count(), 5);
+    assert.equal(await page.locator(".hand .playing-card").count(), 8);
     await page.getByRole("button", { name: "В меню", exact: true }).click();
     await page.evaluate(() => localStorage.clear());
   }
   assert.deepEqual(failures, []);
   console.log(
-    "Production Pages: /my-card-game/ и /Eugenix/ — запуск, 10 SVG, восстановление партии: OK",
+    "Production Pages: /my-card-game/ и /Eugenix/ — запуск, 13 PNG, восстановление партии: OK",
   );
 } finally {
   await browser?.close();

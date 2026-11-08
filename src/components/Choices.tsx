@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CARDS, SAFE_TYPES, type CardType } from "../cards";
+import { CARDS, CARD_TYPES, T, imagePath, type CardType } from "../cards";
 import type { Move, PlayerView } from "../game-engine";
 import { Modal } from "./Modal";
 import { CardButton } from "./Card";
@@ -15,20 +15,17 @@ export function Choices({
   const [position, setPosition] = useState(0);
   const opponents = view.players.filter((p) => p.alive && p.id !== view.id);
   const [target, setTarget] = useState(opponents[0]?.id ?? "");
-  const [requested, setRequested] = useState<CardType>("defuse");
+  const [requested, setRequested] = useState<CardType>(T.defuse);
   const pending = view.pending;
   if (!pending) return null;
   if (pending.kind === "danger")
     return (
       <Modal title="Папа с ремнём!">
         <div className="danger-scene">
-          <img
-            src={`${import.meta.env.BASE_URL}cards/danger.svg`}
-            alt="Сердитый мультяшный папа"
-          />
+          <img src={imagePath(T.danger)} alt="Папа с ремнём" />
         </div>
         <p>
-          Без паники: у вас есть «Мама с салатом». Используйте её, чтобы
+          Взрыв нельзя отменить картой NOPE. Используйте «Маму с салатом», чтобы
           остаться в игре.
         </p>
         <button
@@ -43,8 +40,8 @@ export function Choices({
     return (
       <Modal title="Мама спасла! 🥗">
         <p>
-          Тайно верните Папу в колоду. Позиция 1 — верх, {view.deckCount + 1} —
-          самый низ. Остальные игроки не узнают ваш выбор.
+          Тайно верните Папу. Позиция 1 — верх, {view.deckCount + 1} — низ.
+          Завершится одно обязательство; оставшиеся после атаки сохранятся.
         </p>
         <div className="choice-row">
           <button onClick={() => send({ type: "insert", position: 0 })}>
@@ -103,11 +100,26 @@ export function Choices({
         </button>
       </Modal>
     );
-  if (pending.kind === "request")
+  if (pending.kind === "target")
     return (
-      <Modal title="Попросить карту">
+      <Modal
+        title={
+          pending.action.effect === "favor"
+            ? "У кого попросить карту?"
+            : pending.action.effect === "pair"
+              ? "У кого забрать случайную карту?"
+              : "У кого запросить конкретную карту?"
+        }
+      >
+        <p>
+          {pending.action.effect === "favor"
+            ? "Соперник сам выберет, что отдать."
+            : pending.action.effect === "pair"
+              ? "После окна отмены движок случайно выберет одну карту соперника."
+              : "Назовите желаемый тип. Если у соперника его нет, вы ничего не получите."}
+        </p>
         <label>
-          У кого?
+          Соперник
           <select value={target} onChange={(e) => setTarget(e.target.value)}>
             {opponents.map((p) => (
               <option key={p.id} value={p.id}>
@@ -116,46 +128,96 @@ export function Choices({
             ))}
           </select>
         </label>
-        <label>
-          Какую карту?
-          <select
-            value={requested}
-            onChange={(e) => setRequested(e.target.value as CardType)}
-          >
-            {SAFE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {CARDS[type].name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {pending.action.effect === "triple" && (
+          <label>
+            Какую карту?
+            <select
+              value={requested}
+              onChange={(e) => setRequested(e.target.value as CardType)}
+            >
+              {CARD_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {CARDS[type].name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <button
           className="primary w-full"
           disabled={!target}
           onClick={() =>
-            send({ type: "request", targetId: target, cardType: requested })
+            send({
+              type: "target",
+              targetId: target,
+              ...(pending.action.effect === "triple"
+                ? { cardType: requested }
+                : {}),
+            })
           }
         >
-          Попросить
+          Подтвердить цель
         </button>
       </Modal>
     );
+  if (pending.kind === "nope") {
+    const nope = view.hand.find((c) => c.type === T.nope);
+    const origin = view.players.find((p) => p.id === pending.action.actorId);
+    return (
+      <Modal title="Окно отмены · NOPE">
+        <p>
+          <strong>{origin?.name}</strong>:{" "}
+          {pending.action.size === 1
+            ? CARDS[pending.action.source].name
+            : `комбинация из ${pending.action.size} карт «${CARDS[pending.action.source].name}»`}
+        </p>
+        {pending.action.targetId && (
+          <p>
+            Цель:{" "}
+            {view.players.find((p) => p.id === pending.action.targetId)?.name}.
+            {pending.action.requestedType && (
+              <> Запрошено: {CARDS[pending.action.requestedType].name}.</>
+            )}
+          </p>
+        )}
+        <p className="reaction-state">
+          {pending.cancelled
+            ? "Сейчас действие отменено. Ещё одна NOPE восстановит его."
+            : "Сейчас действие активно. NOPE отменит его."}
+        </p>
+        <p>
+          Решает {view.players.find((p) => p.id === view.id)?.name}. Можно
+          ответить вне собственного хода. После всех ответов окно закроется.
+        </p>
+        <button
+          className="primary w-full"
+          disabled={!nope}
+          onClick={() => nope && send({ type: "nope", cardId: nope.id })}
+        >
+          {nope ? "Сыграть NOPE" : "В руке нет NOPE"}
+        </button>
+        <button
+          className="secondary w-full"
+          onClick={() => send({ type: "pass" })}
+        >
+          Не отменять — дальше
+        </button>
+      </Modal>
+    );
+  }
   return (
-    <Modal
-      title={
-        pending.where === "top"
-          ? "Какую карту положить наверх?"
-          : "Какую карту положить под низ?"
-      }
-    >
-      <p>Выберите другую карту из своей руки. После этого ход продолжится.</p>
+    <Modal title="Выберите карту, которую отдадите">
+      <p>
+        {view.players.find((p) => p.id === pending.toId)?.name} просит одну
+        карту. Вы выбираете сами. Остальная рука останется тайной.
+      </p>
       <div className="choice-cards">
         {view.hand.map((card) => (
           <CardButton
             key={card.id}
             type={card.type}
             animate={animate}
-            onClick={() => send({ type: "place", cardId: card.id })}
+            onClick={() => send({ type: "give", cardId: card.id })}
           />
         ))}
       </div>

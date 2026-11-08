@@ -1,21 +1,123 @@
 import { test, expect, type Page } from "@playwright/test";
+const T = {
+  danger: "PAPA_BELT",
+  defuse: "MAMA_SALAD",
+  skip: "TANYA_THERMOMETER",
+  nope: "ZOYA_KICKS_OUT",
+  attack: "MASHA_ARKASHA_FIGHT",
+  peek: "ZOYA_BINOCULARS",
+  shuffle: "ARKASHA_LEGO",
+  favor: "ZOYA_MONEY",
+  homework: "MASHA_HOMEWORK",
+  piggy: "TANYA_PIGGY_BANK",
+  chinese: "ZOYA_CHINESE",
+  dance: "TANYA_DANCES",
+  draw: "MASHA_DRAWS",
+};
 async function disableAnimations(page: Page) {
   await page.getByRole("button", { name: "Настройки", exact: true }).click();
   await page.getByLabel("Анимации", { exact: true }).uncheck();
   await page.getByRole("button", { name: "Закрыть", exact: true }).click();
 }
-async function imageCheck(page: Page) {
-  const images = page.locator("img");
-  await images.evaluateAll((nodes) =>
-    Promise.all(nodes.map((n) => (n as HTMLImageElement).decode())),
-  );
+async function images(page: Page) {
+  await page
+    .locator("img")
+    .evaluateAll((nodes) =>
+      Promise.all(nodes.map((n) => (n as HTMLImageElement).decode())),
+    );
   expect(
-    await images.evaluateAll((nodes) =>
-      nodes.every((n) => (n as HTMLImageElement).naturalWidth > 0),
-    ),
+    await page
+      .locator("img")
+      .evaluateAll((nodes) =>
+        nodes.every((n) => (n as HTMLImageElement).naturalWidth > 0),
+      ),
   ).toBe(true);
 }
-test("мобильная партия с четырьмя ботами от меню до победы", async ({
+async function ready(page: Page) {
+  await expect(
+    page.getByRole("heading", { name: "Передайте устройство" }),
+  ).toBeVisible();
+  expect(await page.locator(".hand .playing-card").count()).toBe(0);
+  expect(await page.locator("dialog[open]").count()).toBe(0);
+  await page.getByRole("button", { name: "Я готов — показать карты" }).click();
+}
+async function passAll(page: Page) {
+  for (let n = 0; n < 12; n++) {
+    if (
+      await page
+        .getByRole("heading", { name: "Передайте устройство" })
+        .isVisible()
+    )
+      await ready(page);
+    const pass = page.getByRole("button", { name: "Не отменять — дальше" });
+    if (await pass.isVisible()) await pass.click();
+    else return;
+  }
+  throw Error("Окно NOPE не закрывается");
+}
+async function reloadLocal(page: Page) {
+  await page.reload();
+  await page.getByRole("button", { name: "Продолжить партию" }).click();
+  await ready(page);
+}
+async function prepare(
+  page: Page,
+  hands: string[][],
+  dangerFirst = false,
+  mode: "local" | "bots" = "local",
+) {
+  await page.goto("/");
+  await page.evaluate(
+    async ({ hands, dangerFirst, mode }) => {
+      const engine = await import("/src/game-engine/index.ts");
+      const storage = await import("/src/storage/index.ts");
+      const s = engine.newGame({
+        mode,
+        players: hands.length,
+        difficulty: "medium",
+      });
+      // Оставляем исходные физические экземпляры и общий состав из 56 карт.
+      for (let player = 0; player < hands.length; player++) {
+        s.deck.push(...s.players[player].hand.splice(0));
+        for (const type of hands[player]) {
+          const collections = [
+            s.deck,
+            ...s.players
+              .filter((_: unknown, i: number) => i !== player)
+              .map((p: { hand: unknown[] }) => p.hand),
+          ];
+          const source = collections.find((cards: { type: string }[]) =>
+            cards.some((c) => c.type === type),
+          );
+          if (!source) throw Error(type);
+          s.players[player].hand.push(
+            source.splice(
+              source.findIndex((c: { type: string }) => c.type === type),
+              1,
+            )[0],
+          );
+        }
+      }
+      if (dangerFirst) {
+        const i = s.deck.findIndex(
+          (c: { type: string }) => c.type === "PAPA_BELT",
+        );
+        s.deck.unshift(s.deck.splice(i, 1)[0]);
+      }
+      if (!storage.isGameState(s)) throw Error("Некорректная тестовая раздача");
+      storage.saveGame(localStorage, s);
+      localStorage.setItem(
+        "family-chaos.settings.v1",
+        JSON.stringify({ animations: false, sound: false }),
+      );
+    },
+    { hands, dangerFirst, mode },
+  );
+  await page.reload();
+  await page.getByRole("button", { name: "Продолжить партию" }).click();
+  if (mode === "local") await ready(page);
+}
+test("полная мобильная партия с четырьмя ботами и ответами вне своего хода", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -27,21 +129,46 @@ test("мобильная партия с четырьмя ботами от ме
     .getByRole("combobox", { name: "Боты", exact: true })
     .selectOption("hard");
   await page.getByRole("button", { name: "Играть", exact: false }).click();
-  await imageCheck(page);
-  for (let actions = 0; actions < 700; actions++) {
+  expect(await page.locator(".hand .playing-card").count()).toBe(8);
+  await images(page);
+  for (let n = 0; n < 1300; n++) {
     if (
       await page.getByRole("dialog", { name: /победитель|перемирие/ }).count()
     )
       break;
-    const defend = page.getByRole("button", { name: "Мама, спаси! 🥗" });
-    const insert = page.getByRole("button", { name: "Под низ", exact: true });
-    const draw = page.getByRole("button", {
-      name: "Взять карту и завершить ход",
-    });
-    if (await defend.isVisible()) await defend.click();
-    else if (await insert.isVisible()) await insert.click();
-    else if (await draw.isEnabled()) await draw.click();
-    else await page.waitForTimeout(60);
+    if (await page.getByRole("button", { name: "Мама, спаси! 🥗" }).isVisible())
+      await page.getByRole("button", { name: "Мама, спаси! 🥗" }).click();
+    else if (
+      await page
+        .getByRole("button", { name: "Под низ", exact: true })
+        .isVisible()
+    )
+      await page.getByRole("button", { name: "Под низ", exact: true }).click();
+    else if (
+      await page
+        .getByRole("button", { name: "Не отменять — дальше" })
+        .isVisible()
+    )
+      await page.getByRole("button", { name: "Не отменять — дальше" }).click();
+    else if (
+      await page
+        .getByRole("dialog", { name: "Выберите карту, которую отдадите" })
+        .isVisible()
+    )
+      await page
+        .getByRole("dialog", { name: "Выберите карту, которую отдадите" })
+        .locator(".playing-card")
+        .first()
+        .click();
+    else if (
+      await page
+        .getByRole("button", { name: "Взять карту и завершить ход" })
+        .isEnabled()
+    )
+      await page
+        .getByRole("button", { name: "Взять карту и завершить ход" })
+        .click();
+    else await page.waitForTimeout(50);
   }
   await expect(
     page.getByRole("dialog", { name: /победитель|перемирие/ }),
@@ -52,240 +179,213 @@ test("мобильная партия с четырьмя ботами от ме
     fullPage: true,
   });
 });
-test("локальная передача скрывает руку и восстановление защищает текущий выбор", async ({
+test("локальная игра: NOPE, контр-NOPE, тайные ответы после перезагрузки", async ({
+  page,
+}) => {
+  await prepare(page, [
+    [T.attack, T.nope, T.defuse],
+    [T.nope, T.defuse],
+    [T.defuse, T.dance],
+  ]);
+  await page
+    .getByRole("button", { name: /^Маша и Аркаша подрались\./ })
+    .click();
+  await ready(page);
+  await expect(
+    page.getByRole("dialog", { name: "Окно отмены · NOPE" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Сыграть NOPE", exact: true }).click();
+  await ready(page);
+  await page.getByRole("button", { name: "Не отменять — дальше" }).click();
+  await ready(page);
+  await reloadLocal(page);
+  await expect(
+    page.getByText("Сейчас действие отменено.", { exact: false }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Сыграть NOPE", exact: true }).click();
+  await passAll(page);
+  const s = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("family-chaos.game.v2")!),
+  );
+  expect(s.active).toBe(1);
+  expect(s.remaining).toBe(2);
+  expect(
+    s.discard.filter((c: { type: string }) => c.type === "ZOYA_KICKS_OUT"),
+  ).toHaveLength(2);
+});
+test("FAVOR отдаёт выбранную соперником карту с закрытым переходом устройства", async ({
+  page,
+}) => {
+  await prepare(page, [
+    [T.favor, T.defuse],
+    [T.skip, T.defuse, T.dance],
+    [T.defuse],
+  ]);
+  await page
+    .getByRole("button", { name: /^Зоя просит денег у папы\./ })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Соперник", exact: true })
+    .selectOption("p1");
+  await page.getByRole("button", { name: "Подтвердить цель" }).click();
+  await passAll(page);
+  await expect(
+    page.getByRole("dialog", { name: "Выберите карту, которую отдадите" }),
+  ).toBeVisible();
+  await reloadLocal(page);
+  await page
+    .getByRole("dialog", { name: "Выберите карту, которую отдадите" })
+    .getByRole("button", { name: /^Таня танцует\./ })
+    .click();
+  await ready(page);
+  const s = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("family-chaos.game.v2")!),
+  );
+  expect(
+    s.players[0].hand.some((c: { type: string }) => c.type === "TANYA_DANCES"),
+  ).toBe(true);
+  expect(
+    s.players[1].hand.some((c: { type: string }) => c.type === "MAMA_SALAD"),
+  ).toBe(true);
+});
+for (const count of [2, 3])
+  test(`${count} одинаковые: выбор экземпляров и цель через интерфейс`, async ({
+    page,
+  }) => {
+    await prepare(page, [
+      Array(count).fill(T.chinese),
+      [T.defuse, T.skip],
+      [T.defuse],
+    ]);
+    await page
+      .getByRole("button", { name: "Комбинация · 2 или 3 карты" })
+      .click();
+    const cards = page.locator(".hand .playing-card");
+    for (let i = 0; i < count; i++) await cards.nth(i).click();
+    await page.getByRole("button", { name: "Разыграть комбинацию" }).click();
+    await page
+      .getByRole("combobox", { name: "Соперник", exact: true })
+      .selectOption("p1");
+    if (count === 3)
+      await page
+        .getByRole("combobox", { name: "Какую карту?", exact: true })
+        .selectOption(T.defuse);
+    await page.getByRole("button", { name: "Подтвердить цель" }).click();
+    await passAll(page);
+    const s = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("family-chaos.game.v2")!),
+    );
+    expect(s.players[0].hand).toHaveLength(1);
+    if (count === 3) expect(s.players[0].hand[0].type).toBe(T.defuse);
+    expect(s.remaining).toBe(1);
+    expect(s.active).toBe(0);
+  });
+test("просмотр, взрыв, защита и позиция сохраняются после перезагрузки", async ({
+  page,
+}) => {
+  await prepare(page, [[T.peek, T.defuse], [T.defuse], [T.defuse]], true);
+  await page.getByRole("button", { name: /^Зоя смотрит в бинокль\./ }).click();
+  await passAll(page);
+  await reloadLocal(page);
+  await expect(
+    page.getByRole("dialog", { name: "Тайный взгляд в колоду" }),
+  ).toBeVisible();
+  await images(page);
+  await page.getByRole("button", { name: "Запомнил, закрыть" }).click();
+  await page
+    .getByRole("button", { name: "Взять карту и завершить ход" })
+    .click();
+  await reloadLocal(page);
+  await page.getByRole("button", { name: "Мама, спаси! 🥗" }).click();
+  await reloadLocal(page);
+  await page.getByRole("spinbutton").fill("2");
+  await page.getByRole("button", { name: "Вернуть в выбранное место" }).click();
+  await ready(page);
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("family-chaos.game.v2")!).deck[1].type,
+    ),
+  ).toBe(T.danger);
+});
+test("все 13 изображений без обрезки, увеличение, адаптация и прежний дизайн", async ({
+  page,
+}) => {
+  await prepare(page, [
+    [T.defuse, T.chinese, T.dance, T.draw],
+    [T.defuse],
+    [T.defuse],
+  ]);
+  for (const width of [320, 390, 768, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await images(page);
+  expect(
+    await page
+      .locator(".hand .playing-card img")
+      .evaluateAll((nodes) =>
+        nodes.every((n) => getComputedStyle(n).objectFit === "contain"),
+      ),
+  ).toBe(true);
+  await page
+    .getByRole("button", { name: "Увеличить: Таня танцует", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Таня танцует" }),
+  ).toBeVisible();
+  await images(page);
+  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.getByRole("button", { name: "Правила", exact: true }).click();
+  await expect(page.getByText("Пары и тройки", { exact: true })).toBeVisible();
+  await page
+    .locator("details summary")
+    .evaluateAll((nodes) => nodes.forEach((n) => (n as HTMLElement).click()));
+  await images(page);
+  expect(await page.locator(".rules-card-image").count()).toBe(13);
+  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator(".table-page")).toHaveClass(/no-animation/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/mobile-13-cards.png",
+    fullPage: true,
+  });
+});
+test("восемь карт и экран передачи сохраняются при обычной локальной игре", async ({
   page,
 }) => {
   await page.goto("/");
   await disableAnimations(page);
   await page.getByLabel("С кем играем?").selectOption("local");
   await page.getByRole("button", { name: "Играть", exact: false }).click();
-  await expect(
-    page.getByRole("heading", { name: "Передайте устройство" }),
-  ).toBeVisible();
-  expect(await page.locator(".hand .playing-card").count()).toBe(0);
-  await page.getByRole("button", { name: "Я готов — показать карты" }).click();
-  expect(await page.locator(".hand .playing-card").count()).toBe(5);
-  await imageCheck(page);
-  await page.screenshot({
-    path: "test-results/mobile-table.png",
-    fullPage: true,
-  });
-  await page.reload();
-  await page.getByRole("button", { name: "Продолжить партию" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Передайте устройство" }),
-  ).toBeVisible();
-  expect(await page.locator(".hand .playing-card").count()).toBe(0);
-  await page.getByRole("button", { name: "Я готов — показать карты" }).click();
-  await page
-    .getByRole("button", { name: "Взять карту и завершить ход" })
-    .click();
-  if (await page.getByRole("button", { name: "Мама, спаси! 🥗" }).isVisible()) {
-    await page.getByRole("button", { name: "Мама, спаси! 🥗" }).click();
-    await page.getByRole("button", { name: "Под низ", exact: true }).click();
-  }
-  await expect(
-    page.getByRole("heading", { name: "Передайте устройство" }),
-  ).toBeVisible();
-  expect(await page.locator(".hand .playing-card").count()).toBe(0);
+  await ready(page);
+  expect(await page.locator(".hand .playing-card").count()).toBe(8);
+  await reloadLocal(page);
+  expect(await page.locator(".hand .playing-card").count()).toBe(8);
 });
-test("нет переполнения на телефоне, планшете и компьютере; правила доступны", async ({
+
+test("новая партия сбрасывает незавершённый выбор комбинации", async ({
   page,
 }) => {
-  await page.goto("/");
-  for (const width of [320, 390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await imageCheck(page);
-  await page.screenshot({
-    path: "test-results/mobile-home.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Правила", exact: true }).click();
-  await expect(
-    page.getByText("Если колода пуста при попытке взять карту", {
-      exact: false,
-    }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Закрыть", exact: true }).click();
-});
-// Валидная тестовая раздача: переставляем существующие экземпляры без добавления карт.
-async function prepare(page: Page, hand: string[], dangerFirst = false) {
-  await page.goto("/");
-  await page.evaluate(
-    async ({ hand, dangerFirst }) => {
-      const engine = await import("/src/game-engine/index.ts");
-      const { useGameStore } = await import("/src/storage/store.ts");
-      const s = engine.newGame({
-        mode: "local",
-        players: 3,
-        difficulty: "medium",
-      });
-      for (let slot = 0; slot < hand.length; slot++) {
-        const collections = [
-          s.players[0].hand,
-          ...s.players.slice(1).map((p: { hand: unknown[] }) => p.hand),
-          s.deck,
-        ];
-        let found = false;
-        for (const collection of collections) {
-          const index = collection.findIndex(
-            (c: { type: string }, i: number) =>
-              c.type === hand[slot] &&
-              (collection !== s.players[0].hand || i >= slot),
-          );
-          if (index >= 0) {
-            [s.players[0].hand[slot], collection[index]] = [
-              collection[index],
-              s.players[0].hand[slot],
-            ];
-            found = true;
-            break;
-          }
-        }
-        if (!found) throw new Error("Не найден тестовый экземпляр");
-      }
-      if (dangerFirst) {
-        const index = s.deck.findIndex(
-          (c: { type: string }) => c.type === "danger",
-        );
-        [s.deck[0], s.deck[index]] = [s.deck[index], s.deck[0]];
-      }
-      useGameStore.setState({
-        game: s,
-        screen: "game",
-        revealed: `${s.id}:${s.turn}`,
-        settings: { animations: false, sound: false },
-      });
-    },
-    { hand, dangerFirst },
-  );
-}
-async function reloadLocal(page: Page) {
-  await page.reload();
-  await page.getByRole("button", { name: "Продолжить партию" }).click();
-  expect(await page.locator(".hand .playing-card").count()).toBe(0);
-  await page.getByRole("button", { name: "Я готов — показать карты" }).click();
-}
-test("запрос, верх и низ работают через диалоги; незаконченный выбор сохраняется", async ({
-  page,
-}) => {
-  await prepare(page, ["defuse", "request", "top", "bottom", "peek"]);
-  await page.getByRole("button", { name: /Маша делает уроки с мамой/ }).click();
+  await prepare(page, [[T.homework, T.homework], [T.defuse], [T.defuse]]);
   await page
-    .getByRole("combobox", { name: "У кого?", exact: true })
-    .selectOption("p1");
-  await page
-    .getByRole("combobox", { name: "Какую карту?", exact: true })
-    .selectOption("defuse");
-  await page.getByRole("button", { name: "Попросить", exact: true }).click();
-  await expect(page.locator(".event-log")).toContainText("Карта передана.");
-  await page.getByRole("button", { name: /Зоя просит денег у папы/ }).click();
-  const top = page.getByRole("dialog", {
-    name: "Какую карту положить наверх?",
-  });
-  await top.getByRole("button", { name: /Зоя смотрит в бинокль/ }).click();
-  expect(
-    await page.evaluate(
-      () =>
-        JSON.parse(localStorage.getItem("family-chaos.game.v1")!).deck[0].type,
-    ),
-  ).toBe("peek");
-  await page.getByRole("button", { name: /Таня кладёт денежки/ }).click();
-  await reloadLocal(page);
-  const bottom = page.getByRole("dialog", {
-    name: "Какую карту положить под низ?",
-  });
-  await bottom
-    .getByRole("button", { name: /Мама с салатом/ })
-    .first()
+    .getByRole("button", { name: "Комбинация · 2 или 3 карты" })
     .click();
-  expect(
-    await page.evaluate(
-      () =>
-        JSON.parse(localStorage.getItem("family-chaos.game.v1")!).deck.at(-1)
-          .type,
-    ),
-  ).toBe("defuse");
+  await page.locator(".hand .playing-card").nth(0).click();
+  await page.locator(".hand .playing-card").nth(1).click();
+  await page.getByRole("button", { name: "Новая партия", exact: true }).click();
   await page
-    .getByRole("button", { name: "Взять карту и завершить ход" })
+    .getByRole("button", { name: "Начать новую партию", exact: true })
     .click();
+  await ready(page);
   await expect(
-    page.getByRole("heading", { name: "Передайте устройство" }),
+    page.getByRole("button", { name: "Комбинация · 2 или 3 карты" }),
   ).toBeVisible();
-});
-test("тайный просмотр и спасение восстанавливаются после перезагрузки", async ({
-  page,
-}) => {
-  await prepare(page, ["defuse", "peek", "skip", "shuffle", "reverse"], true);
-  await page.getByRole("button", { name: /Зоя смотрит в бинокль/ }).click();
-  await reloadLocal(page);
-  await expect(
-    page.getByRole("dialog", { name: "Тайный взгляд в колоду" }),
-  ).toBeVisible();
-  await imageCheck(page);
-  await page.getByRole("button", { name: "Запомнил, закрыть" }).click();
-  await page
-    .getByRole("button", { name: "Взять карту и завершить ход" })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Папа с ремнём!" }),
-  ).toBeVisible();
-  await reloadLocal(page);
-  await page.getByRole("button", { name: "Мама, спаси! 🥗" }).click();
-  await reloadLocal(page);
-  await page.getByRole("spinbutton").fill("2");
-  await page.getByRole("button", { name: "Вернуть в выбранное место" }).click();
-  const saved = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("family-chaos.game.v1")!),
-  );
-  expect(saved.deck[1].type).toBe("danger");
-  expect(
-    saved.players[0].hand.some((c: { type: string }) => c.type === "defuse"),
-  ).toBe(false);
-  await expect(
-    page.getByRole("heading", { name: "Передайте устройство" }),
-  ).toBeVisible();
-});
-test("все десять SVG локальны; игровой стол адаптируется и отключает движение", async ({
-  page,
-}) => {
-  await prepare(page, ["defuse", "attack", "skip", "shuffle", "reverse"]);
-  for (const width of [320, 390, 768, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-  }
-  for (const type of [
-    "danger",
-    "defuse",
-    "skip",
-    "reverse",
-    "attack",
-    "peek",
-    "shuffle",
-    "request",
-    "top",
-    "bottom",
-  ]) {
-    const response = await page.request.get(`/cards/${type}.svg`);
-    expect(response.ok()).toBe(true);
-    expect(await response.text()).toContain("<svg");
-  }
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await expect(page.locator(".table-page")).toHaveClass(/no-animation/);
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.screenshot({
-    path: "test-results/desktop-table.png",
-    fullPage: true,
-  });
+  expect(await page.locator('.hand [aria-pressed="true"]').count()).toBe(0);
+  expect(await page.locator(".hand .playing-card").count()).toBe(8);
 });

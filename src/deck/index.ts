@@ -1,4 +1,4 @@
-import { CARDS, CARD_TYPES, type Card } from "../cards";
+import { CARDS, CARD_TYPES, T, type Card } from "../cards";
 export type Random = () => number;
 export function shuffle<T>(
   cards: readonly T[],
@@ -23,28 +23,32 @@ export function deal(count: number, random: Random = Math.random) {
   if (!Number.isInteger(count) || count < 2 || count > 5)
     throw new Error("Нужно от 2 до 5 игроков.");
   const full = createDeck();
-  const defenses = full.filter((c) => c.type === "defuse");
+  const defenses = full.filter((c) => c.type === T.defuse);
+  const dangers = full.filter((c) => c.type === T.danger);
   const safe = shuffle(
-    full.filter((c) => c.type !== "danger" && c.type !== "defuse"),
+    full.filter((c) => c.type !== T.danger && c.type !== T.defuse),
     random,
   );
   if (
     defenses.length < count ||
-    safe.length < count * 4 ||
-    CARDS.danger.count < count - 1
+    safe.length < count * 7 ||
+    dangers.length < count - 1
   )
-    throw new Error("В конфигурации не хватает карт для безопасной раздачи.");
+    throw new Error("Недостаточно карт для безопасной раздачи.");
   const hands = Array.from({ length: count }, (_, i) => [
     defenses[i],
-    ...safe.splice(0, 4),
+    ...safe.splice(0, 7),
   ]);
-  const deck = shuffle(
-    [
-      ...safe,
-      ...defenses.slice(count),
-      ...full.filter((c) => c.type === "danger").slice(0, count - 1),
+  const extraDefenses = defenses.slice(count, count + 2);
+  return {
+    hands,
+    deck: shuffle(
+      [...safe, ...extraDefenses, ...dangers.slice(0, count - 1)],
+      random,
+    ),
+    excluded: [
+      ...defenses.slice(count + extraDefenses.length),
+      ...dangers.slice(count - 1),
     ],
-    random,
-  );
-  return { hands, deck };
+  };
 }

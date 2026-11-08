@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   applyAction,
+  decisionPlayerId,
   newGame,
   viewFor,
   type Command,
@@ -42,7 +43,8 @@ interface AppState {
   configure: (patch: Partial<Settings>) => void;
   clearError: () => void;
 }
-const token = (game: GameState) => `${game.id}:${game.turn}`;
+export const privacyToken = (game: GameState) =>
+  `${game.id}:${game.turn}:${decisionPlayerId(game)}:${game.phase === "nope" ? game.revision : game.phase === "give" ? "give" : "turn"}`;
 function persist(game: GameState): string | null {
   try {
     saveGame(storage(), game);
@@ -83,17 +85,17 @@ export const useGameStore = create<AppState>((set, get) => ({
       !game ||
       screen !== "game" ||
       game.status !== "playing" ||
-      !game.players[game.active].bot
+      !game.players.find((p) => p.id === decisionPlayerId(game))?.bot
     )
       return;
-    const actor = game.players[game.active].id;
+    const actor = decisionPlayerId(game);
     // AI получает только view, а не game. Применение решения снова проходит валидацию движка.
     const move = chooseMove(viewFor(game, actor));
     get().send({ actor, revision: game.revision, move });
   },
   reveal: () => {
     const game = get().game;
-    if (game) set({ revealed: token(game) });
+    if (game) set({ revealed: privacyToken(game) });
   },
   resume: () => set({ screen: "game", revealed: null, error: null }),
   home: () => set({ screen: "home", revealed: null }),
@@ -115,6 +117,6 @@ export function needsHandoff(game: GameState, revealed: string | null) {
   return (
     game.config.mode === "local" &&
     game.status === "playing" &&
-    revealed !== token(game)
+    revealed !== privacyToken(game)
   );
 }

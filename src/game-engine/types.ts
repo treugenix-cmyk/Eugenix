@@ -12,12 +12,45 @@ export interface Player {
   alive: boolean;
   hand: Card[];
 }
+export type ActionKind =
+  | "skip"
+  | "attack"
+  | "peek"
+  | "shuffle"
+  | "favor"
+  | "pair"
+  | "triple";
+export interface ActionPlan {
+  actorId: string;
+  effect: ActionKind;
+  source: CardType;
+  size: 1 | 2 | 3;
+  targetId?: string;
+  requestedType?: CardType;
+}
 export type Pending =
   | { kind: "danger"; card: Card }
   | { kind: "insert"; card: Card }
   | { kind: "peek"; cards: CardType[] }
-  | { kind: "request" }
-  | { kind: "place"; where: "top" | "bottom" };
+  | { kind: "target"; action: ActionPlan }
+  | {
+      kind: "nope";
+      action: ActionPlan;
+      cancelled: boolean;
+      responder: string;
+      lastActor: string;
+      passed: string[];
+    }
+  | { kind: "give"; fromId: string; toId: string };
+export type Phase =
+  | "turn"
+  | "target"
+  | "nope"
+  | "give"
+  | "danger"
+  | "insert"
+  | "peek"
+  | "finished";
 export type Effect =
   | "deal"
   | "draw"
@@ -25,21 +58,24 @@ export type Effect =
   | "danger"
   | "rescue"
   | "shuffle"
-  | "reverse"
+  | "cancel"
+  | "steal"
   | "win";
 export interface GameState {
-  version: 1;
+  version: 2;
   id: string;
   config: GameConfig;
   players: Player[];
   deck: Card[];
   discard: Card[];
+  excluded: Card[];
   active: number;
-  direction: 1 | -1;
+  direction: 1;
   remaining: number;
   attacked: boolean;
   turn: number;
   revision: number;
+  phase: Phase;
   pending: Pending | null;
   known: Record<string, CardType[]>;
   log: string[];
@@ -51,11 +87,14 @@ export interface GameState {
 export type Move =
   | { type: "draw" }
   | { type: "play"; cardId: string }
+  | { type: "combo"; cardIds: string[] }
+  | { type: "target"; targetId: string; cardType?: CardType }
+  | { type: "nope"; cardId: string }
+  | { type: "pass" }
+  | { type: "give"; cardId: string }
   | { type: "defend" }
   | { type: "insert"; position: number }
-  | { type: "ack" }
-  | { type: "request"; targetId: string; cardType: CardType }
-  | { type: "place"; cardId: string };
+  | { type: "ack" };
 export interface Command {
   actor: string;
   revision: number;
@@ -75,12 +114,15 @@ export interface PlayerView {
   config: GameConfig;
   players: PublicPlayer[];
   activeId: string;
-  direction: 1 | -1;
+  decisionId: string;
+  direction: 1;
   remaining: number;
   attacked: boolean;
+  phase: Phase;
   hand: Card[];
   deckCount: number;
   discard: Card[];
+  excludedCount: number;
   pending: Pending | null;
   knownTop: CardType[];
   dangerEstimate: number;

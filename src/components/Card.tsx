@@ -1,17 +1,13 @@
 import { motion } from "motion/react";
-import { CARDS, type CardType } from "../cards";
+import { CARDS, imagePath, type CardType } from "../cards";
 export function CardFace({ type }: { type: CardType }) {
-  const definition = CARDS[type];
   return (
-    <>
-      <span className="card-label">{definition.short}</span>
-      <img
-        src={`${import.meta.env.BASE_URL}cards/${type}.svg`}
-        alt=""
-        draggable={false}
-      />
-      <strong>{definition.name}</strong>
-    </>
+    <img
+      className="approved-card-image"
+      src={imagePath(type)}
+      alt={CARDS[type].name}
+      draggable={false}
+    />
   );
 }
 export function CardButton({
@@ -20,22 +16,25 @@ export function CardButton({
   disabled = false,
   index = 0,
   animate = true,
+  selected = false,
 }: {
   type: CardType;
   onClick?: () => void;
   disabled?: boolean;
   index?: number;
   animate?: boolean;
+  selected?: boolean;
 }) {
   const definition = CARDS[type];
   return (
     <motion.button
       type="button"
-      className="playing-card"
+      className={`playing-card full-art-card ${selected ? "selected" : ""}`}
       style={{ "--card-color": definition.color } as React.CSSProperties}
       disabled={disabled}
       onClick={onClick}
       aria-label={`${definition.name}. ${definition.description}`}
+      aria-pressed={selected || undefined}
       title={definition.description}
       initial={animate ? { opacity: 0, y: 16 } : false}
       animate={{ opacity: 1, y: 0 }}
@@ -46,6 +45,11 @@ export function CardButton({
       whileTap={animate && !disabled ? { scale: 0.97 } : undefined}
     >
       <CardFace type={type} />
+      {selected && (
+        <span className="selection-badge" aria-hidden="true">
+          ✓
+        </span>
+      )}
     </motion.button>
   );
 }

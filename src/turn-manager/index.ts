@@ -1,17 +1,16 @@
 import type { GameState } from "../game-engine/types";
 export function nextAlive(s: GameState, from = s.active) {
   for (let step = 1; step <= s.players.length; step++) {
-    const i =
-      (from + s.direction * step + s.players.length * step) % s.players.length;
+    const i = (from + step) % s.players.length;
     if (s.players[i].alive) return i;
   }
   throw new Error("В партии нет оставшихся игроков.");
 }
-export function endObligation(s: GameState, stay = false) {
+export function endObligation(s: GameState) {
   s.remaining--;
   s.turn++;
   if (s.remaining === 0) {
-    s.active = stay ? s.active : nextAlive(s);
+    s.active = nextAlive(s);
     s.remaining = 1;
     s.attacked = false;
   }
