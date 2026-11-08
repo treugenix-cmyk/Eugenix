@@ -1,28 +1,30 @@
 'use strict';
-const ELEMENTS = Object.freeze({
-  fire: { name: 'Огонь', symbol: '🔥', beats: 'earth' },
-  water: { name: 'Вода', symbol: '💧', beats: 'fire' },
-  earth: { name: 'Земля', symbol: '🌿', beats: 'water' }
+const CHARACTERS = Object.freeze({
+  busya: { name: 'Буся', symbol: '🐈', beats: 'kanik' },
+  kanik: { name: 'Каник', symbol: '🐺', beats: 'tanyunya' },
+  tanyunya: { name: 'Танюня', symbol: '🦊', beats: 'voya-boya' },
+  'voya-boya': { name: 'Воя-Боя', symbol: '🐻', beats: 'busya' }
 });
 // 1 — победа игрока, -1 — победа компьютера, 0 — ничья.
 function compareCards(player, computer) {
-  if (player.element === computer.element) return Math.sign(player.power - computer.power);
-  return ELEMENTS[player.element].beats === computer.element ? 1 : -1;
+  if (CHARACTERS[player.character].beats === computer.character) return 1;
+  if (CHARACTERS[computer.character].beats === player.character) return -1;
+  return Math.sign(player.power - computer.power);
 }
 function createHand(random = Math.random) {
-  const elements = Object.keys(ELEMENTS);
-  return Array.from({ length: 5 }, () => ({ element: elements[Math.floor(random() * 3)], power: Math.floor(random() * 5) + 1 }));
+  const characters = Object.keys(CHARACTERS);
+  return Array.from({ length: 5 }, () => ({ character: characters[Math.floor(random() * characters.length)], power: Math.floor(random() * 5) + 1 }));
 }
 const ui = Object.fromEntries(['player-score','computer-score','round','computer-hand','player-hand','player-play','computer-play','result','explanation','cards-left','new-game'].map(id => [id, document.getElementById(id)]));
 let state;
 let nextRoundTimer;
 function makeCard(card, interactive = false) {
-  const element = ELEMENTS[card.element];
+  const character = CHARACTERS[card.character];
   const node = document.createElement(interactive ? 'button' : 'div');
-  node.className = `card ${card.element}`;
-  node.setAttribute('aria-label', `${element.name}, сила ${card.power}`);
+  node.className = `card ${card.character}`;
+  node.setAttribute('aria-label', `${character.name}, сила ${card.power}`);
   if (interactive) node.type = 'button';
-  for (const [className, value] of [['power',card.power],['symbol',element.symbol],['name',element.name]]) {
+  for (const [className, value] of [['power',card.power],['symbol',character.symbol],['name',character.name]]) {
     const part = document.createElement('span');
     part.className = className;
     part.textContent = value;
@@ -63,15 +65,19 @@ function playCard(index) {
   ui['player-play'].replaceChildren(makeCard(player));
   ui['computer-play'].replaceChildren(makeCard(computer));
   const roundResult = outcome > 0 ? 'Вы выиграли раунд' : outcome < 0 ? 'Хранитель выиграл раунд' : 'Ничья в раунде';
-  const reason = player.element === computer.element
-    ? player.power === computer.power ? 'Стихии и сила совпали.' : `Одинаковые стихии: ${Math.max(player.power,computer.power)} сильнее ${Math.min(player.power,computer.power)}.`
-    : `${ELEMENTS[outcome > 0 ? player.element : computer.element].name} побеждает стихию «${ELEMENTS[outcome > 0 ? computer.element : player.element].name}».`;
+  const hasAdvantage = CHARACTERS[player.character].beats === computer.character
+    || CHARACTERS[computer.character].beats === player.character;
+  const reason = hasAdvantage
+    ? `${CHARACTERS[outcome > 0 ? player.character : computer.character].name} имеет преимущество: сила не учитывается.`
+    : player.power === computer.power
+      ? 'Преимущества нет, сила равна — ничья.'
+      : `Преимущества нет: сила ${Math.max(player.power,computer.power)} побеждает силу ${Math.min(player.power,computer.power)}.`;
   renderHands();
   ui.round.textContent = `Раунд ${state.rounds} из 5`;
   if (state.rounds === 5) {
     state.busy = false;
     ui.round.textContent = '5 раундов сыграно';
-    ui.result.textContent = state.playerScore > state.computerScore ? 'Победа! Стихии на вашей стороне' : state.playerScore < state.computerScore ? 'Победил хранитель стихий' : 'Равновесие! Ничья';
+    ui.result.textContent = state.playerScore > state.computerScore ? 'Победа! Герои на вашей стороне' : state.playerScore < state.computerScore ? 'Победил хранитель' : 'Равновесие! Ничья';
     ui.explanation.textContent = `${state.playerScore} : ${state.computerScore}. ${roundResult}. ${reason} Сыграйте ещё раз!`;
     return;
   }
@@ -90,7 +96,7 @@ function newGame() {
     const placeholder = document.createElement('span'); placeholder.textContent = label;
     ui[id].replaceChildren(placeholder);
   }
-  ui.result.textContent = 'Выберите свою стихию';
+  ui.result.textContent = 'Выберите своего персонажа';
   ui.explanation.textContent = 'Коснитесь карты, чтобы начать дуэль.';
   renderHands();
 }
