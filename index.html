@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#11131b">
+<title>Три стихии — карточная дуэль</title><link rel="stylesheet" href="style.css"><script src="game.js" defer></script>
+</head>
+<body><main class="game">
+<header><p class="eyebrow">КАРТОЧНАЯ ДУЭЛЬ</p><h1>Три стихии</h1><p class="subtitle">Пять карт. Три силы. Один победитель.</p></header>
+<section class="scoreboard" aria-label="Счёт"><div><span>Вы</span><strong id="player-score">0</strong></div><p id="round">Раунд 1 из 5</p><div><span>Хранитель</span><strong id="computer-score">0</strong></div></section>
+<section class="opponent" aria-label="Карты компьютера"><p>ХРАНИТЕЛЬ СТИХИЙ</p><div id="computer-hand" class="backs"></div></section>
+<section class="arena" aria-label="Поле дуэли"><div id="player-play" class="slot"></div><span class="versus" aria-hidden="true">VS</span><div id="computer-play" class="slot"></div></section>
+<div class="message" role="status" aria-live="polite" aria-atomic="true"><h2 id="result"></h2><p id="explanation"></p></div>
+<section aria-label="Ваши карты"><div class="hand-heading"><h2>Ваша рука</h2><span id="cards-left"></span></div><div id="player-hand" class="hand"></div></section>
+<button id="new-game" class="new-game" type="button">↻ Новая игра</button>
+<details><summary>Как играть</summary><p>Огонь побеждает Землю, Земля — Воду, Вода — Огонь. Стихия важнее силы. При одинаковых стихиях побеждает большая сила (от 1 до 5). Одинаковые карты дают ничью.</p><p>За победу в раунде — 1 очко, за ничью — 0. После пяти раундов побеждает тот, у кого больше очков. Карты могут повторяться.</p></details>
+<footer>Огонь → Земля → Вода → Огонь</footer>
+</main></body></html>
