@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { CARDS } from "../cards";
+import { CARDS, T, imagePath, type CardType } from "../cards";
 import {
   playable,
+  comboable,
+  decisionPlayerId,
   viewFor,
   type Difficulty,
   type GameConfig,
@@ -36,29 +38,42 @@ export default function App() {
     players: 3,
     difficulty: "medium",
   });
+  const [selection, setSelection] = useState<{
+    revision: number;
+    ids: string[];
+  }>({ revision: -1, ids: [] });
+  const [comboMode, setComboMode] = useState(false);
+  const [zoom, setZoom] = useState<CardType | null>(null);
+  const selected = selection.revision === game?.revision ? selection.ids : [];
   const prefersReduced = useReducedMotion();
   const animate = settings.animations && !prefersReduced;
   const active = game?.players[game.active];
+  const decider = game?.players.find((p) => p.id === decisionPlayerId(game));
   useEffect(() => {
     if (
       screen !== "game" ||
       game?.status !== "playing" ||
-      !active?.bot ||
-      panel
+      !decider?.bot ||
+      panel ||
+      zoom
     )
       return;
     const timer = setTimeout(botStep, animate ? 650 : 100);
     return () => clearTimeout(timer);
-  }, [game, screen, active?.bot, botStep, animate, panel]);
+  }, [game, screen, decider?.bot, botStep, animate, panel, zoom]);
   useEffect(() => {
     if (game && screen === "game" && settings.sound) soundEffect(game.effect);
   }, [game?.revision, game?.id, screen, settings.sound]);
   const perform = (move: Move) => {
-    if (!game || !active || active.bot) return;
+    if (!game || !decider || decider.bot) return;
     if (settings.sound) unlockAudio();
-    send({ actor: active.id, revision: game.revision, move });
+    setSelection({ revision: -1, ids: [] });
+    send({ actor: decider.id, revision: game.revision, move });
   };
   const launch = () => {
+    setSelection({ revision: -1, ids: [] });
+    setComboMode(false);
+    setZoom(null);
     if (settings.sound) unlockAudio();
     setPanel(null);
     start(config);
@@ -136,9 +151,9 @@ export default function App() {
           <br className="hidden sm:block" /> одна заботливая мама.
         </p>
         <div className="hero-cards" aria-hidden="true">
-          {(["peek", "defuse", "danger"] as const).map((type) => (
+          {([T.peek, T.defuse, T.danger] as const).map((type) => (
             <div
-              className="playing-card"
+              className="playing-card full-art-card"
               key={type}
               style={
                 { "--card-color": CARDS[type].color } as React.CSSProperties
@@ -246,7 +261,7 @@ export default function App() {
         </div>
         <p className="eyebrow">КАРТЫ НАДЁЖНО СПРЯТАНЫ</p>
         <h1>Передайте устройство</h1>
-        <h2>{active?.name}</h2>
+        <h2>{decider?.name}</h2>
         <p>
           Остальные отворачиваются. Только вы увидите свою руку и тайные
           действия.
@@ -263,12 +278,15 @@ export default function App() {
         <button onClick={home}>В меню</button>
       </main>
     );
-  const viewer =
-    game.config.mode === "local" ? game.players[game.active] : game.players[0];
+  const viewer = game.config.mode === "local" ? decider! : game.players[0];
   const view = viewFor(game, viewer.id);
   const isHumanTurn =
-    active?.id === viewer.id && !active.bot && game.status === "playing";
-  const showChoices = isHumanTurn && view.pending !== null;
+    active?.id === viewer.id &&
+    !active.bot &&
+    game.status === "playing" &&
+    game.phase === "turn";
+  const showChoices =
+    decider?.id === viewer.id && !decider.bot && view.pending !== null;
   const opponents = view.players.filter((p) => p.id !== viewer.id);
   const shake =
     animate && game.effect === "danger"
@@ -295,7 +313,7 @@ export default function App() {
         {opponents.map((p, i) => (
           <div
             key={p.id}
-            className={`opponent ${p.id === view.activeId ? "active" : ""} ${p.alive ? "" : "eliminated"}`}
+            className={`opponent ${p.id === view.decisionId ? "active" : ""} ${p.alive ? "" : "eliminated"}`}
           >
             <span className="avatar" aria-hidden="true">
               {["🦊", "🐻", "🐰", "🐱"][i]}
@@ -308,7 +326,7 @@ export default function App() {
                   : "Выбыл"}
               </small>
             </div>
-            {p.id === view.activeId && (
+            {p.id === view.decisionId && (
               <span className="turn-dot" aria-label="Сейчас ходит" />
             )}
           </div>
@@ -330,8 +348,14 @@ export default function App() {
             {view.direction === 1 ? "↻" : "↺"}
           </motion.span>
           <span>
-            {active?.name}
-            {active?.bot ? " думает…" : " — ваш ход"}
+            {decider?.name}
+            {decider?.bot
+              ? " думает…"
+              : view.phase === "nope"
+                ? " — ответ NOPE"
+                : view.phase === "give"
+                  ? " — передача карты"
+                  : " — ваш ход"}
           </span>
           <span className="debt">Ходов: {view.remaining}</span>
         </div>
@@ -361,7 +385,7 @@ export default function App() {
               {view.discard.length ? (
                 <motion.div
                   key={view.discard.at(-1)!.id}
-                  className="playing-card"
+                  className="playing-card full-art-card"
                   style={
                     {
                       "--card-color": CARDS[view.discard.at(-1)!.type].color,
@@ -384,7 +408,7 @@ export default function App() {
         <p className="table-hint" role="status" aria-live="polite">
           {game.status === "finished"
             ? "Переполох завершён"
-            : active?.bot
+            : decider?.bot
               ? "Соперник выбирает действие"
               : !viewer.alive
                 ? "Вы наблюдаете за оставшимися игроками"
@@ -403,6 +427,34 @@ export default function App() {
           </h2>
           <span>{view.hand.length} карт</span>
         </div>
+        {isHumanTurn && (
+          <div className="combo-controls">
+            <button
+              aria-pressed={comboMode}
+              onClick={() => {
+                setComboMode(!comboMode);
+                setSelection({ revision: game.revision, ids: [] });
+              }}
+            >
+              {comboMode ? "Выйти из выбора" : "Комбинация · 2 или 3 карты"}
+            </button>
+            {comboMode && (
+              <>
+                <span>Выбрано: {selected.length} / 3</span>
+                <button
+                  className="primary"
+                  disabled={!comboable(view, selected)}
+                  onClick={() => {
+                    perform({ type: "combo", cardIds: selected });
+                    setComboMode(false);
+                  }}
+                >
+                  Разыграть комбинацию
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <motion.div
           className="hand"
           key={`${game.id}-${viewer.id}`}
@@ -415,14 +467,43 @@ export default function App() {
           transition={{ duration: animate ? 0.25 : 0 }}
         >
           {view.hand.map((card, i) => (
-            <CardButton
-              key={card.id}
-              type={card.type}
-              index={i}
-              animate={animate}
-              disabled={!isHumanTurn || !playable(view, card.id) || !!panel}
-              onClick={() => perform({ type: "play", cardId: card.id })}
-            />
+            <div className="card-tile" key={card.id}>
+              <CardButton
+                type={card.type}
+                index={i}
+                animate={animate}
+                selected={selected.includes(card.id)}
+                disabled={
+                  !!panel ||
+                  !!zoom ||
+                  !isHumanTurn ||
+                  (!comboMode && !playable(view, card.id)) ||
+                  (comboMode &&
+                    selected.length > 0 &&
+                    !selected.includes(card.id) &&
+                    (selected.length >= 3 ||
+                      card.type !==
+                        view.hand.find((c) => c.id === selected[0])?.type))
+                }
+                onClick={() => {
+                  if (comboMode) {
+                    setSelection({
+                      revision: game.revision,
+                      ids: selected.includes(card.id)
+                        ? selected.filter((id) => id !== card.id)
+                        : [...selected, card.id],
+                    });
+                  } else perform({ type: "play", cardId: card.id });
+                }}
+              />
+              <button
+                className="zoom-button"
+                aria-label={`Увеличить: ${CARDS[card.type].name}`}
+                onClick={() => setZoom(card.type)}
+              >
+                Увеличить
+              </button>
+            </div>
           ))}
         </motion.div>
         {view.hand.length === 0 && (
@@ -501,6 +582,16 @@ export default function App() {
           >
             Посмотреть правила
           </button>
+        </Modal>
+      )}
+      {zoom && (
+        <Modal title={CARDS[zoom].name} onClose={() => setZoom(null)}>
+          <img
+            className="zoomed-card"
+            src={imagePath(zoom)}
+            alt={CARDS[zoom].name}
+          />
+          <p>{CARDS[zoom].description}</p>
         </Modal>
       )}
       {modals}
